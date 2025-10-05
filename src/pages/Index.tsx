@@ -2,10 +2,11 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { FlipCard } from "@/components/FlipCard";
+import { Slider } from "@/components/ui/slider";
+import { MinesGrid } from "@/components/MinesGrid";
 import { FlipHistory, FlipRecord } from "@/components/FlipHistory";
 import { toast } from "sonner";
-import { Coins, TrendingUp, Trophy } from "lucide-react";
+import { Coins, TrendingUp, Trophy, Bomb } from "lucide-react";
 
 const STORAGE_KEY = "donutflip_data";
 const INITIAL_BALANCE = 1000;
@@ -18,8 +19,8 @@ interface GameData {
 const Index = () => {
   const [balance, setBalance] = useState<number>(INITIAL_BALANCE);
   const [betAmount, setBetAmount] = useState<string>("100");
-  const [isFlipping, setIsFlipping] = useState(false);
-  const [result, setResult] = useState<"win" | "lose" | null>(null);
+  const [mineCount, setMineCount] = useState<number>(3);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [history, setHistory] = useState<FlipRecord[]>([]);
 
   // Load data from localStorage
@@ -46,7 +47,7 @@ const Index = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   };
 
-  const handleFlip = () => {
+  const handleStartGame = () => {
     const amount = parseInt(betAmount);
 
     if (isNaN(amount) || amount <= 0) {
@@ -59,43 +60,42 @@ const Index = () => {
       return;
     }
 
-    setIsFlipping(true);
-    setResult(null);
+    setBalance(balance - amount);
+    setIsPlaying(true);
+  };
 
-    // Simulate flip animation
-    setTimeout(() => {
-      const won = Math.random() >= 0.5;
-      const flipResult: "win" | "lose" = won ? "win" : "lose";
-      const newBalance = won ? balance + amount : balance - amount;
+  const handleGameEnd = (won: boolean, multiplier: number) => {
+    const amount = parseInt(betAmount);
+    const winAmount = won ? Math.floor(amount * multiplier) : 0;
+    const newBalance = balance + winAmount;
 
-      const record: FlipRecord = {
-        id: Date.now().toString(),
-        amount,
-        result: flipResult,
-        timestamp: new Date(),
-      };
+    const record: FlipRecord = {
+      id: Date.now().toString(),
+      amount: won ? winAmount - amount : amount,
+      result: won ? "win" : "lose",
+      timestamp: new Date(),
+    };
 
-      setResult(flipResult);
-      setBalance(newBalance);
-      const newHistory = [record, ...history].slice(0, 50);
-      setHistory(newHistory);
-      saveData(newBalance, newHistory);
+    setBalance(newBalance);
+    const newHistory = [record, ...history].slice(0, 50);
+    setHistory(newHistory);
+    saveData(newBalance, newHistory);
 
-      if (won) {
-        toast.success(`You won ${amount} coins! 🎉`, {
-          className: "bg-success text-success-foreground",
-        });
-      } else {
-        toast.error(`You lost ${amount} coins 💥`, {
-          className: "bg-destructive text-destructive-foreground",
-        });
-      }
+    if (won) {
+      toast.success(`You won ${winAmount - amount} coins! 🎉`, {
+        className: "bg-success text-success-foreground",
+      });
+    } else {
+      toast.error(`You lost ${amount} coins 💣`, {
+        className: "bg-destructive text-destructive-foreground",
+      });
+    }
 
-      setTimeout(() => {
-        setIsFlipping(false);
-        setResult(null);
-      }, 2000);
-    }, 600);
+    setIsPlaying(false);
+  };
+
+  const handleReset = () => {
+    setIsPlaying(false);
   };
 
   const resetBalance = () => {
@@ -119,10 +119,10 @@ const Index = () => {
         {/* Header */}
         <div className="text-center mb-12">
           <h1 className="text-6xl md:text-7xl font-bold mb-4 gradient-primary bg-clip-text text-transparent">
-            DonutFlip
+            DonutMines
           </h1>
           <p className="text-xl text-muted-foreground">
-            50/50 chance to double your coins or lose it all
+            Reveal tiles and multiply your bet - but avoid the mines!
           </p>
         </div>
 
@@ -159,13 +159,11 @@ const Index = () => {
           </Card>
         </div>
 
-        {/* Main Flip Interface */}
+        {/* Main Mines Interface */}
         <div className="max-w-2xl mx-auto mb-8">
           <Card className="p-8 border-primary/50 glow-intense">
-            <div className="flex flex-col items-center gap-8">
-              <FlipCard isFlipping={isFlipping} result={result} />
-
-              <div className="w-full max-w-sm space-y-4">
+            {!isPlaying ? (
+              <div className="w-full space-y-6">
                 <div>
                   <label className="block text-sm font-medium mb-2">Bet Amount</label>
                   <Input
@@ -173,7 +171,6 @@ const Index = () => {
                     value={betAmount}
                     onChange={(e) => setBetAmount(e.target.value)}
                     placeholder="Enter bet amount"
-                    disabled={isFlipping}
                     className="text-center text-lg font-semibold"
                   />
                 </div>
@@ -183,7 +180,6 @@ const Index = () => {
                     variant="outline"
                     size="sm"
                     onClick={() => setBetAmount("100")}
-                    disabled={isFlipping}
                   >
                     100
                   </Button>
@@ -191,7 +187,6 @@ const Index = () => {
                     variant="outline"
                     size="sm"
                     onClick={() => setBetAmount("250")}
-                    disabled={isFlipping}
                   >
                     250
                   </Button>
@@ -199,7 +194,6 @@ const Index = () => {
                     variant="outline"
                     size="sm"
                     onClick={() => setBetAmount("500")}
-                    disabled={isFlipping}
                   >
                     500
                   </Button>
@@ -207,33 +201,60 @@ const Index = () => {
                     variant="outline"
                     size="sm"
                     onClick={() => setBetAmount(balance.toString())}
-                    disabled={isFlipping || balance === 0}
+                    disabled={balance === 0}
                   >
                     All In
                   </Button>
                 </div>
 
+                <div>
+                  <div className="flex justify-between items-center mb-3">
+                    <label className="text-sm font-medium">Number of Mines</label>
+                    <div className="flex items-center gap-2">
+                      <Bomb className="w-4 h-4 text-destructive" />
+                      <span className="text-lg font-bold text-destructive">{mineCount}</span>
+                    </div>
+                  </div>
+                  <Slider
+                    value={[mineCount]}
+                    onValueChange={(value) => setMineCount(value[0])}
+                    min={1}
+                    max={23}
+                    step={1}
+                    className="w-full"
+                  />
+                  <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                    <span>1 mine</span>
+                    <span>23 mines</span>
+                  </div>
+                </div>
+
                 <Button
                   variant="flip"
                   size="xl"
-                  onClick={handleFlip}
-                  disabled={isFlipping}
+                  onClick={handleStartGame}
                   className="w-full"
                 >
-                  {isFlipping ? "Flipping..." : "FLIP NOW"}
+                  START GAME
                 </Button>
 
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={resetBalance}
-                  disabled={isFlipping}
                   className="w-full"
                 >
                   Reset Balance
                 </Button>
               </div>
-            </div>
+            ) : (
+              <MinesGrid
+                mineCount={mineCount}
+                betAmount={parseInt(betAmount)}
+                onGameEnd={handleGameEnd}
+                onReset={handleReset}
+              />
+            )}
           </Card>
         </div>
 
