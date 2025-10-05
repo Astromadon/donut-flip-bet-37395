@@ -43,14 +43,7 @@ export const MinesGrid = ({ mineCount, betAmount, onGameEnd, onReset }: MinesGri
   };
 
   const calculateMultiplier = (safeRevealed: number): number => {
-    const safeTiles = GRID_SIZE - mineCount;
-    if (safeRevealed === 0) return 1;
-    
-    let multiplier = 1;
-    for (let i = 0; i < safeRevealed; i++) {
-      multiplier *= (safeTiles / (safeTiles - i)) * 1.08;
-    }
-    return multiplier;
+    return 1 + (safeRevealed * 0.25);
   };
 
   const currentMultiplier = calculateMultiplier(revealedCount);
